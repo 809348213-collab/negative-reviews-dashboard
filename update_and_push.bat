@@ -50,7 +50,7 @@ if errorlevel 1 (
     echo ✅ 已推送到GitHub！
     echo.
     echo 🎉 更新完成！请等待1-2分钟GitHub Pages自动刷新。
-    echo 访问地址: https://你的用户名.github.io/negative-reviews-dashboard/
+    echo 访问地址: https://809348213-collab.github.io/negative-reviews-dashboard/
 ) else (
     echo ℹ️ 数据没有变化，跳过提交。
 )
