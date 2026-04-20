@@ -1,0 +1,9 @@
+# 忽略CSV源文件（每次重新导出）
+negative_reviews.csv
+
+# 忽略Python缓存
+__pycache__/
+*.pyc
+
+# 忽略Git内部
+.git/
