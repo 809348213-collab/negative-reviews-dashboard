@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OC线差评汇总看板</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif; }
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: #f1f1f1; }
+  ::-webkit-scrollbar-thumb { background: #ccc; border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: #aaa; }
+  .card { background: white; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); padding: 20px; }
+  .stat-number { font-size: 28px; font-weight: 700; color: #1e3a5f; }
+  .bar-container { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .bar-label { min-width: 100px; text-align: right; font-size: 13px; color: #555; flex-shrink: 0; }
+  .bar-track { flex: 1; height: 24px; background: #f0f4f8; border-radius: 4px; overflow: hidden; position: relative; }
+  .bar-fill { height: 100%; border-radius: 4px; display: flex; align-items: center; padding-left: 8px; font-size: 12px; font-weight: 600; color: white; transition: width 0.5s ease; }
+  .bar-value { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); font-size: 12px; color: #666; font-weight: 500; }
+  .review-card { border-bottom: 1px solid #f0f0f0; padding: 16px 0; }
+  .review-card:last-child { border-bottom: none; }
+  .rating-star { color: #f59e0b; }
+  .rating-star.empty { color: #ddd; }
+  .sentiment-badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 12px; font-weight: 500; }
+  .sentiment-negative { background: #fef2f2; color: #dc2626; }
+  .sentiment-positive { background: #f0fdf4; color: #16a34a; }
+  .tag-badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 12px; background: #f0f4f8; color: #444; margin: 2px; }
+  .filter-select { padding: 6px 12px; border: 1px solid #ddd; border-radius: 6px; font-size: 13px; background: white; cursor: pointer; }
+  .filter-select:focus { outline: none; border-color: #3b82f6; }
+  .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+  .modal-content { background: white; border-radius: 12px; padding: 24px; max-width: 700px; width: 90%; max-height: 80vh; overflow-y: auto; }
+  .close-btn { cursor: pointer; font-size: 24px; color: #999; float: right; }
+  .close-btn:hover { color: #333; }
+  .pie-chart { display: flex; flex-wrap: wrap; gap: 4px; }
+  .pie-segment { height: 20px; border-radius: 2px; }
+  .legend-item { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; margin-right: 12px; margin-bottom: 4px; }
+  .legend-color { width: 12px; height: 12px; border-radius: 2px; }
+  .trend-line { display: flex; align-items: flex-end; gap: 2px; height: 120px; padding: 10px 0; }
+  .trend-bar { flex: 1; border-radius: 4px 4px 0 0; min-width: 20px; position: relative; cursor: pointer; transition: opacity 0.2s; }
+  .trend-bar:hover { opacity: 0.8; }
+  .trend-bar .tooltip { position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); background: #333; color: white; padding: 4px 8px; border-radius: 4px; font-size: 11px; white-space: nowrap; display: none; }
+  .trend-bar:hover .tooltip { display: block; }
+  .trend-label { text-align: center; font-size: 11px; color: #888; margin-top: 4px; }
+  .empty-state { text-align: center; padding: 40px; color: #999; }
+  .shop-badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: 500; }
+  .shop-jd { background: #e8f4fd; color: #1d4ed8; }
+  .shop-tm { background: #fef3c7; color: #d97706; }
+  .shop-dy { background: #fce7f3; color: #be185d; }
+  .header-gradient { background: linear-gradient(135deg, #1e3a5f 0%, #3b82f6 100%); }
+</style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+
+<!-- 顶部导航 -->
+<div class="header-gradient text-white py-6 px-6">
+  <div class="max-w-7xl mx-auto flex items-center justify-between">
+    <div>
+      <h1 class="text-2xl font-bold">OC线差评汇总看板</h1>
+      <p class="text-blue-100 mt-1 text-sm">数据来源：飞书云文档 · 最后更新：<span id="lastUpdate">-</span></p>
+    </div>
+    <div class="text-right">
+      <div class="text-3xl font-bold" id="totalCount">0</div>
+      <div class="text-blue-100 text-sm">差评总数</div>
+    </div>
+  </div>
+</div>
+
+<!-- 主体内容 -->
+<div class="max-w-7xl mx-auto p-6">
+
+  <!-- 筛选区 -->
+  <div class="card mb-6">
+    <div class="flex flex-wrap items-center gap-4">
+      <label class="text-sm font-medium text-gray-600">筛选：</label>
+      <select id="filterShop" class="filter-select">
+        <option value="">全部店铺</option>
+      </select>
+      <select id="filterModel" class="filter-select">
+        <option value="">全部型号</option>
+      </select>
+      <select id="filterTag" class="filter-select">
+        <option value="">全部标签</option>
+      </select>
+      <select id="filterRating" class="filter-select">
+        <option value="">全部星级</option>
+        <option value="1">1星</option>
+        <option value="2">2星</option>
+        <option value="3">3星</option>
+        <option value="4">4星</option>
+        <option value="5">5星</option>
+      </select>
+      <select id="filterMonth" class="filter-select">
+        <option value="">全部时间</option>
+      </select>
+      <input type="text" id="searchKeyword" placeholder="搜索评论内容..." class="filter-select flex-1 min-w-[200px]" style="cursor:text;">
+      <button onclick="clearFilters()" class="text-sm text-blue-600 hover:text-blue-800 font-medium">清除筛选</button>
+    </div>
+  </div>
+
+  <!-- 统计卡片区 -->
+  <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+    <div class="card">
+      <div class="text-sm text-gray-500 mb-1">涉及店铺</div>
+      <div class="stat-number" id="statShops">0</div>
+      <div class="text-xs text-gray-400 mt-1">共 <span id="statShopEntries">0</span> 条记录</div>
+    </div>
+    <div class="card">
+      <div class="text-sm text-gray-500 mb-1">涉及型号</div>
+      <div class="stat-number" id="statModels">0</div>
+      <div class="text-xs text-gray-400 mt-1">主型号占比 <span id="statMainModel">0</span>%</div>
+    </div>
+    <div class="card">
+      <div class="text-sm text-gray-500 mb-1">1-2星差评</div>
+      <div class="stat-number text-red-600" id="statLowRating">0</div>
+      <div class="text-xs text-gray-400 mt-1">占 <span id="statLowRatingPct">0</span>%</div>
+    </div>
+    <div class="card">
+      <div class="text-sm text-gray-500 mb-1">高频问题标签</div>
+      <div class="stat-number text-amber-600" id="statTopTag">-</div>
+      <div class="text-xs text-gray-400 mt-1" id="statTopTagCount"></div>
+    </div>
+  </div>
+
+  <!-- 图表区 -->
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+    <!-- 店铺分布 -->
+    <div class="card">
+      <h3 class="font-semibold text-gray-700 mb-4 text-lg">📊 店铺分布</h3>
+      <div id="shopChart"></div>
+    </div>
+
+    <!-- 型号分布 -->
+    <div class="card">
+      <h3 class="font-semibold text-gray-700 mb-4 text-lg">📊 型号分布</h3>
+      <div id="modelChart"></div>
+    </div>
+
+    <!-- 月度趋势 -->
+    <div class="card">
+      <h3 class="font-semibold text-gray-700 mb-4 text-lg">📈 月度趋势</h3>
+      <div id="trendChart"></div>
+    </div>
+
+    <!-- 标签分布 -->
+    <div class="card">
+      <h3 class="font-semibold text-gray-700 mb-4 text-lg">🏷️ 问题标签 TOP10</h3>
+      <div id="tagChart"></div>
+    </div>
+  </div>
+
+  <!-- 评论列表 -->
+  <div class="card">
+    <div class="flex items-center justify-between mb-4">
+      <h3 class="font-semibold text-gray-700 text-lg">📝 评论详情</h3>
+      <span class="text-sm text-gray-500">显示 <span id="displayCount">0</span> 条</span>
+    </div>
+    <div id="reviewList"></div>
+    <div id="pagination" class="flex justify-center gap-2 mt-4"></div>
+  </div>
+</div>
+
+<!-- 评论详情弹窗 -->
+<div id="reviewModal" class="modal-overlay" style="display:none;" onclick="if(event.target===this)closeModal()">
+  <div class="modal-content">
+    <span class="close-btn" onclick="closeModal()">&times;</span>
+    <div id="modalBody"></div>
+  </div>
+</div>
+
+<script>
+// ==================== 数据加载 ====================
+let allReviews = [];
+let filteredReviews = [];
+let currentPage = 1;
+const pageSize = 20;
+
+async function loadData() {
+  try {
+    const resp = await fetch('data.json');
+    const data = await resp.json();
+    allReviews = data.reviews;
+    document.getElementById('totalCount').textContent = data.total_count.toLocaleString();
+    document.getElementById('lastUpdate').textContent = data.last_updated;
+
+    initFilters(data.statistics);
+    initCharts(data.statistics);
+    updateStats(data.statistics);
+
+    filteredReviews = [...allReviews];
+    renderReviews();
+  } catch (err) {
+    console.error('加载数据失败:', err);
+    document.getElementById('reviewList').innerHTML = '<div class="empty-state">数据加载失败，请确保 data.json 与 HTML 文件在同一目录</div>';
+  }
+}
+
+// ==================== 筛选器初始化 ====================
+function initFilters(stats) {
+  populateSelect('filterShop', stats.shop_dist);
+  populateSelect('filterModel', stats.model_dist);
+  populateSelect('filterTag', stats.tag_dist);
+
+  const months = Object.keys(stats.month_dist).sort();
+  const filterMonth = document.getElementById('filterMonth');
+  months.forEach(m => {
+    const opt = document.createElement('option');
+    opt.value = m;
+    opt.textContent = m;
+    filterMonth.appendChild(opt);
+  });
+
+  // 绑定事件
+  ['filterShop','filterModel','filterTag','filterRating','filterMonth'].forEach(id => {
+    document.getElementById(id).addEventListener('change', applyFilters);
+  });
+  document.getElementById('searchKeyword').addEventListener('input', debounce(applyFilters, 300));
+}
+
+function populateSelect(id, data) {
+  const sel = document.getElementById(id);
+  Object.keys(data).forEach(key => {
+    const opt = document.createElement('option');
+    opt.value = key;
+    opt.textContent = `${key} (${data[key]})`;
+    sel.appendChild(opt);
+  });
+}
+
+function applyFilters() {
+  const shop = document.getElementById('filterShop').value;
+  const model = document.getElementById('filterModel').value;
+  const tag = document.getElementById('filterTag').value;
+  const rating = document.getElementById('filterRating').value;
+  const month = document.getElementById('filterMonth').value;
+  const keyword = document.getElementById('searchKeyword').value.toLowerCase();
+
+  filteredReviews = allReviews.filter(r => {
+    if (shop && r['店铺'] !== shop) return false;
+    if (model && r['型号'] !== model) return false;
+    if (tag && !r['全局标签']?.includes(tag.replace(/\(负面\)|\(正面\)/g, ''))) return false;
+    if (rating && r['评论星级'] !== rating) return false;
+    if (month && !r['评论时间']?.startsWith(month)) return false;
+    if (keyword) {
+      const text = (r['评论内容'] || '').toLowerCase();
+      if (!text.includes(keyword)) return false;
+    }
+    return true;
+  });
+
+  currentPage = 1;
+  renderReviews();
+  document.getElementById('displayCount').textContent = filteredReviews.length;
+}
+
+function clearFilters() {
+  ['filterShop','filterModel','filterTag','filterRating','filterMonth'].forEach(id => {
+    document.getElementById(id).value = '';
+  });
+  document.getElementById('searchKeyword').value = '';
+  applyFilters();
+}
+
+function debounce(fn, delay) {
+  let timer;
+  return function(...args) {
+    clearTimeout(timer);
+    timer = setTimeout(() => fn.apply(this, args), delay);
+  };
+}
+
+// ==================== 统计卡片 ====================
+function updateStats(stats) {
+  document.getElementById('statShops').textContent = Object.keys(stats.shop_dist).length;
+  document.getElementById('statShopEntries').textContent = allReviews.length;
+
+  const modelCount = Object.keys(stats.model_dist).length;
+  document.getElementById('statModels').textContent = modelCount;
+  const mainModelVal = stats.model_dist[Object.keys(stats.model_dist)[0]] || 0;
+  document.getElementById('statMainModel').textContent = Math.round(mainModelVal / allReviews.length * 100);
+
+  const lowRating = (stats.rating_dist[1] || 0) + (stats.rating_dist[2] || 0);
+  document.getElementById('statLowRating').textContent = lowRating;
+  document.getElementById('statLowRatingPct').textContent = Math.round(lowRating / allReviews.length * 100);
+
+  const topTag = Object.keys(stats.tag_dist)[0] || '-';
+  const topTagCount = stats.tag_dist[topTag] || 0;
+  document.getElementById('statTopTag').textContent = topTag.length > 8 ? topTag.slice(0, 8) + '...' : topTag;
+  document.getElementById('statTopTagCount').textContent = `${topTagCount} 次出现`;
+}
+
+// ==================== 图表渲染 ====================
+function initCharts(stats) {
+  renderBarChart('shopChart', stats.shop_dist, getShopColor);
+  renderBarChart('modelChart', stats.model_dist, getModelColor);
+  renderTrendChart(stats.month_dist);
+  renderBarChart('tagChart', stats.tag_dist, () => '#f59e0b');
+}
+
+function getShopColor(label) {
+  if (label.includes('京东')) return '#3b82f6';
+  if (label.includes('天猫')) return '#f59e0b';
+  if (label.includes('抖音')) return '#ec4899';
+  return '#6366f1';
+}
+
+function getModelColor(label) {
+  if (label === 'OC-1') return '#1e3a5f';
+  if (label === 'OC-1Pro') return '#3b82f6';
+  if (label === 'S1') return '#10b981';
+  return '#6366f1';
+}
+
+function renderBarChart(containerId, data, colorFn) {
+  const container = document.getElementById(containerId);
+  const entries = Object.entries(data);
+  const maxVal = Math.max(...entries.map(e => e[1]));
+
+  container.innerHTML = entries.slice(0, 8).map(([label, val]) => {
+    const pct = (val / maxVal * 100).toFixed(0);
+    const color = colorFn(label);
+    return `<div class="bar-container">
+      <div class="bar-label" title="${label}">${label.length > 8 ? label.slice(0,8)+'...' : label}</div>
+      <div class="bar-track">
+        <div class="bar-fill" style="width:${pct}%;background:${color}">${pct > 25 ? val : ''}</div>
+        <span class="bar-value">${val}</span>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderTrendChart(data) {
+  const container = document.getElementById('trendChart');
+  const entries = Object.entries(data);
+  const maxVal = Math.max(...entries.map(e => e[1]));
+
+  container.innerHTML = `<div class="trend-line">
+    ${entries.map(([month, val]) => {
+      const h = (val / maxVal * 100).toFixed(0);
+      return `<div style="flex:1;text-align:center">
+        <div class="trend-bar" style="height:${h}px;background:linear-gradient(180deg,#3b82f6,#60a5fa)">
+          <span class="tooltip">${month}: ${val}条</span>
+        </div>
+        <div class="trend-label">${month.slice(5)}</div>
+      </div>`;
+    }).join('')}
+  </div>`;
+}
+
+// ==================== 评论列表 ====================
+function renderReviews() {
+  const list = document.getElementById('reviewList');
+  const start = (currentPage - 1) * pageSize;
+  const end = start + pageSize;
+  const pageData = filteredReviews.slice(start, end);
+
+  if (pageData.length === 0) {
+    list.innerHTML = '<div class="empty-state">暂无匹配的评论数据</div>';
+    document.getElementById('pagination').innerHTML = '';
+    return;
+  }
+
+  list.innerHTML = pageData.map((r, i) => {
+    const stars = renderStars(parseInt(r['评论星级']) || 0);
+    const sentiment = r['消息情感'] || '';
+    const sentimentClass = sentiment === '负面' ? 'sentiment-negative' : 'sentiment-positive';
+    const shopClass = getShopClass(r['店铺'] || '');
+    const content = r['评论内容'] || '';
+    const preview = content.length > 120 ? content.slice(0, 120) + '...' : content;
+    const tag = r['全局标签'] ? `<span class="tag-badge">${r['全局标签']}</span>` : '';
+
+    return `<div class="review-card">
+      <div class="flex items-start justify-between gap-4">
+        <div class="flex-1">
+          <div class="flex items-center gap-2 mb-2 flex-wrap">
+            <span class="shop-badge ${shopClass}">${r['店铺'] || ''}</span>
+            <span class="text-sm font-medium">${r['型号'] || ''}</span>
+            <span class="text-xs text-gray-400">${r['销售属性'] || ''}</span>
+            ${tag}
+            <span class="sentiment-badge ${sentimentClass}">${sentiment}</span>
+          </div>
+          <p class="text-gray-700 text-sm leading-relaxed mb-2">${escapeHtml(preview)}</p>
+          <div class="flex items-center gap-4 text-xs text-gray-400">
+            <span>${stars}</span>
+            <span>${r['评论时间'] || ''}</span>
+            <span>${r['消息类型'] || ''}</span>
+            <button onclick="showReviewDetail(${start + i})" class="text-blue-600 hover:text-blue-800 font-medium">查看详情 →</button>
+          </div>
+        </div>
+        ${r['图片链接'] ? '<div class="w-16 h-16 rounded overflow-hidden flex-shrink-0"><img src="' + escapeHtml(r['图片链接'].split('\n')[0]) + '" class="w-full h-full object-cover" onerror="this.style.display=\'none\'"></div>' : ''}
+      </div>
+    </div>`;
+  }).join('');
+
+  renderPagination();
+}
+
+function renderStars(rating) {
+  let html = '';
+  for (let i = 1; i <= 5; i++) {
+    if (i <= rating) {
+      html += '<span class="rating-star">★</span>';
+    } else {
+      html += '<span class="rating-star empty">★</span>';
+    }
+  }
+  return html;
+}
+
+function getShopClass(shop) {
+  if (shop.includes('京东')) return 'shop-jd';
+  if (shop.includes('天猫')) return 'shop-tm';
+  if (shop.includes('抖音')) return 'shop-dy';
+  return '';
+}
+
+function renderPagination() {
+  const totalPages = Math.ceil(filteredReviews.length / pageSize);
+  const container = document.getElementById('pagination');
+
+  if (totalPages <= 1) {
+    container.innerHTML = '';
+    return;
+  }
+
+  let html = '';
+  if (currentPage > 1) {
+    html += `<button onclick="goPage(${currentPage - 1})" class="px-3 py-1 rounded border border-gray-300 text-sm hover:bg-gray-100">上一页</button>`;
+  }
+
+  for (let i = Math.max(1, currentPage - 2); i <= Math.min(totalPages, currentPage + 2); i++) {
+    const active = i === currentPage ? 'bg-blue-600 text-white border-blue-600' : 'border-gray-300 hover:bg-gray-100';
+    html += `<button onclick="goPage(${i})" class="px-3 py-1 rounded border text-sm ${active}">${i}</button>`;
+  }
+
+  if (currentPage < totalPages) {
+    html += `<button onclick="goPage(${currentPage + 1})" class="px-3 py-1 rounded border border-gray-300 text-sm hover:bg-gray-100">下一页</button>`;
+  }
+
+  container.innerHTML = html;
+}
+
+function goPage(page) {
+  currentPage = page;
+  renderReviews();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+// ==================== 详情弹窗 ====================
+function showReviewDetail(index) {
+  const r = filteredReviews[index];
+  if (!r) return;
+
+  const modal = document.getElementById('reviewModal');
+  const body = document.getElementById('modalBody');
+
+  body.innerHTML = `
+    <h2 class="text-xl font-bold mb-4 text-gray-800">评论详情</h2>
+    <div class="flex items-center gap-2 mb-4 flex-wrap">
+      <span class="shop-badge ${getShopClass(r['店铺'] || '')}">${r['店铺'] || ''}</span>
+      <span class="text-sm font-medium">${r['型号'] || ''}</span>
+      <span class="text-xs text-gray-400">${r['销售属性'] || ''}</span>
+      <span class="tag-badge">${r['全局标签'] || ''}</span>
+    </div>
+    <div class="mb-4">${renderStars(parseInt(r['评论星级']) || 0)}</div>
+    <div class="prose max-w-none mb-4">
+      <p class="text-gray-700 leading-relaxed whitespace-pre-wrap">${escapeHtml(r['评论内容'] || '')}</p>
+    </div>
+    ${r['图片链接'] ? `<div class="mb-4">
+      <p class="text-sm text-gray-500 mb-2">评论图片：</p>
+      <div class="flex flex-wrap gap-2">
+        ${r['图片链接'].split('\n').filter(u=>u.trim()).map(url => `<img src="${escapeHtml(url.trim())}" class="w-32 h-32 object-cover rounded cursor-pointer" onclick="window.open(this.src)" onerror="this.style.display='none'">`).join('')}
+      </div>
+    </div>` : ''}
+    <div class="grid grid-cols-2 gap-4 text-sm">
+      <div><span class="text-gray-500">评论时间：</span>${r['评论时间'] || '-'}</div>
+      <div><span class="text-gray-500">消息类型：</span>${r['消息类型'] || '-'}</div>
+      <div><span class="text-gray-500">订单编号：</span>${r['订单编号'] || '-'}</div>
+      <div><span class="text-gray-500">订单时间：</span>${r['订单时间'] || '-'}</div>
+      <div><span class="text-gray-500">用户：</span>${r['用户'] || '-'}</div>
+      <div><span class="text-gray-500">情感：</span><span class="sentiment-badge ${r['消息情感']==='负面'?'sentiment-negative':'sentiment-positive'}">${r['消息情感']||'-'}</span></div>
+    </div>
+    ${r['商品链接'] ? `<div class="mt-4"><a href="${escapeHtml(r['商品链接'])}" target="_blank" class="text-blue-600 hover:underline text-sm">查看商品链接 →</a></div>` : ''}
+  `;
+
+  modal.style.display = 'flex';
+}
+
+function closeModal() {
+  document.getElementById('reviewModal').style.display = 'none';
+}
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+// ==================== 启动 ====================
+document.addEventListener('DOMContentLoaded', loadData);
+</script>
+</body>
+</html>
