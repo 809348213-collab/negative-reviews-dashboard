@@ -1,107 +1,94 @@
 @echo off
-chcp 65001 >nul
+REM UTF-8 console + Python output, so Chinese in CSV/JSON logs render correctly.
+chcp 65001 > nul
+set PYTHONIOENCODING=utf-8
+
 echo ========================================
-echo   差评看板数据更新工具
+echo   Negative Reviews Dashboard - Update
 echo ========================================
 echo.
-echo 开始时间: %date% %time%
+echo Start: %date% %time%
 echo.
 
 cd /d "%~dp0"
 
-echo [1/4] 正在从飞书导出最新数据...
+echo [1/5] Exporting CSV from Feishu...
 lark-cli sheets +export --url https://e10s8ombcbw.feishu.cn/sheets/U0OisV8zghcf77tOJnGcYheinoh --file-extension csv --sheet-id 0UxVhM --output-path negative_reviews.csv > "%TEMP%\feishu_export.log" 2>&1
 if errorlevel 1 (
-    echo ❌ 飞书导出失败！请查看日志：
-    type "%TEMP%\feishu_export.log"
-    echo.
-    echo 可能的原因：
-    echo  1. 网络连接问题
-    echo  2. 飞书账号未登录或权限过期
-    echo  3. 飞书文档链接已变更
-    echo.
+    echo ERROR: Feishu export failed!
+    echo Possible: network issue / Feishu login expired / doc link changed.
+    echo TIP: If you already exported the CSV manually, rename it to
+    echo      negative_reviews.csv in this folder, then re-run this script
+    echo      (it will skip to step 2 on next try) or just run convert_data.py.
+    echo Log: %TEMP%\feishu_export.log
     pause
     exit /b 1
 )
-echo ✅ 导出完成
-
+echo DONE: export complete.
 echo.
-echo [2/4] 正在转换数据...
-python convert_data.py > "%TEMP%\convert.log" 2>&1
+
+echo [2/5] Converting CSV to data.json...
+python convert_data.py
 if errorlevel 1 (
-    echo ❌ 数据转换失败！请查看日志：
-    type "%TEMP%\convert.log"
-    echo.
-    echo 可能的原因：
-    echo  1. Python未安装或路径不对
-    echo  2. convert_data.py文件损坏
-    echo  3. CSV文件格式异常
-    echo.
+    echo ERROR: Data conversion failed!
+    echo Check Python install and the CSV format.
     pause
     exit /b 1
 )
-type "%TEMP%\convert.log"
-echo ✅ 转换完成
-
+echo DONE: conversion complete.
 echo.
-echo [3/4] 正在提交到本地Git仓库...
-git add data.json
+
+echo [3/5] Committing to local Git...
+git add data.json convert_data.py
 git diff --cached --quiet
 if errorlevel 1 (
-    git commit -m "更新差评数据: %date:~0,4%-%date:~5,2%-%date:~8,2%" > "%TEMP%\git_commit.log" 2>&1
+    git commit -m "Update reviews: %date:~0,4%-%date:~5,2%-%date:~8,2%" > "%TEMP%\git_commit.log" 2>&1
     if errorlevel 1 (
-        echo ❌ Git提交失败！请查看日志：
-        type "%TEMP%\git_commit.log"
-        echo.
-        echo 可能的原因：
-        echo  1. 未配置Git用户信息
-        echo  2. 当前目录不是Git仓库
-        echo.
-        echo 解决方法：
-        echo  运行以下命令配置Git：
-        echo  git config user.name "你的名字"
-        echo  git config user.email "你的邮箱"
-        echo.
+        echo ERROR: Git commit failed! Configure git user first:
+        echo   git config user.name "Your Name"
+        echo   git config user.email "your@email.com"
         pause
         exit /b 1
     )
-    echo ✅ 已提交到本地仓库
+    echo DONE: committed locally.
 ) else (
-    echo ℹ️ 数据没有变化，跳过提交。
-    echo.
-    echo 如果确实需要更新，请检查：
-    echo  1. 飞书文档是否真的有新增数据
-    echo  2. 数据格式是否与之前一致
-    echo.
+    echo INFO: No changes detected, nothing to commit.
     pause
     exit /b 0
 )
-
 echo.
-echo [4/4] 正在推送到GitHub...
-git push > "%TEMP%\git_push.log" 2>&1
+
+echo [4/5] Syncing with remote (pull --rebase)...
+git pull --rebase origin main > "%TEMP%\git_pull.log" 2>&1
 if errorlevel 1 (
-    echo ❌ 推送失败！请查看日志：
-    type "%TEMP%\git_push.log"
-    echo.
-    echo 可能的原因：
-    echo  1. 网络连接问题
-    echo  2. GitHub账号权限问题
-    echo  3. 远程仓库地址配置错误
-    echo.
-    echo 你可以稍后手动运行: git push
-    echo.
+    echo ERROR: Sync failed - likely a conflict on data.json.
+    echo Open the repo, resolve the conflict markers, then run:
+    echo   git add data.json
+    echo   git rebase --continue
+    echo   git push origin main
+    echo Log: %TEMP%\git_pull.log
     pause
     exit /b 1
 )
-echo ✅ 已推送到GitHub！
+echo DONE: in sync with remote.
+echo.
 
+echo [5/5] Pushing to GitHub...
+git push origin main > "%TEMP%\git_push.log" 2>&1
+if errorlevel 1 (
+    echo ERROR: Push failed! Push manually later: git push origin main
+    echo Log: %TEMP%\git_push.log
+    pause
+    exit /b 1
+)
+echo DONE: pushed to GitHub!
 echo.
+
 echo ========================================
-echo 🎉 更新完成！
+echo   Update complete!
 echo ========================================
 echo.
-echo 请等待1-2分钟GitHub Pages自动刷新。
-echo 访问地址: https://809348213-collab.github.io/negative-reviews-dashboard/
+echo GitHub Pages refreshes in ~1-2 minutes.
+echo URL: https://809348213-collab.github.io/negative-reviews-dashboard/
 echo.
 pause

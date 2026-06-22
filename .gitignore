@@ -1,5 +1,5 @@
-# 忽略CSV源文件（每次重新导出）
-negative_reviews.csv
+# 忽略CSV源文件（每次重新导出，含手动导出的各种文件名）
+*.csv
 
 # 忽略Python缓存
 __pycache__/
