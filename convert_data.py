@@ -60,10 +60,17 @@ def analyze(rows):
             tag_label = f"{tag}({tag_sentiment})" if tag_sentiment else tag
             tag_counter[tag_label] += 1
 
-        # 月份统计
-        comment_time = row.get("评论时间", "")
-        if comment_time and len(comment_time) >= 7:
-            month = comment_time[:7]  # YYYY-MM
+        # 月份统计（兼容 "2026-01-01" 和 "2026/1/1" 两种格式）
+        comment_time = (row.get("评论时间", "") or "").strip()
+        date_part = comment_time.split(" ")[0] if comment_time else ""
+        month = ""
+        for sep in ("-", "/"):
+            if sep in date_part:
+                parts = date_part.split(sep)
+                if len(parts) >= 2 and parts[0].isdigit() and parts[1].isdigit():
+                    month = f"{parts[0]}-{int(parts[1]):02d}"
+                break
+        if month:
             month_counter[month] += 1
 
         # 消息类型
